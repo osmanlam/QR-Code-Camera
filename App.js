@@ -6,22 +6,58 @@ import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
+import { PanGestureHandler, GestureHandlerRootView, State } from 'react-native-gesture-handler';
+
+const IMAGE_WIDTH = 320;
+const IMAGE_HEIGHT = 500;
+const QR_SIZE = 90;
 
 export default function App() {
+  const cameraRef = useRef(null);
+  const viewShotRef = useRef();
+
   const [facing, setFacing] = useState('back');
   const [flash, setFlash] = useState('off');
-  const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
-
   const [photo, setPhoto] = useState(null); // {uri, coords}
   const [loading, setLoading] = useState(false);
 
-  const viewShotRef = useRef();
+  // QR code position
+  const [qrPos, setQrPos] = useState({ x: 210, y: 370 });
+  const qrLast = useRef({ x: 210, y: 370 });
 
-  function toggleCameraFacing() { setFacing(cur => (cur === 'back' ? 'front' : 'back')); }
-  function toggleFlash() { setFlash(cur => (cur === 'off' ? 'on' : 'off')); }
+  // Drag logic
+  const onDragGesture = evt => {
+    if (evt.nativeEvent.state === State.ACTIVE) {
+      let x = qrLast.current.x + evt.nativeEvent.translationX;
+      let y = qrLast.current.y + evt.nativeEvent.translationY;
+      x = Math.max(0, Math.min(x, IMAGE_WIDTH - QR_SIZE));
+      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - QR_SIZE));
+      setQrPos({ x, y });
+    }
+    if (evt.nativeEvent.state === State.END || evt.nativeEvent.state === State.CANCELLED) {
+      let x = qrLast.current.x + evt.nativeEvent.translationX;
+      let y = qrLast.current.y + evt.nativeEvent.translationY;
+      x = Math.max(0, Math.min(x, IMAGE_WIDTH - QR_SIZE));
+      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - QR_SIZE));
+      qrLast.current.x = x;
+      qrLast.current.y = y;
+      setQrPos({ x, y });
+    }
+  };
+
+  function getMapURL(coords) {
+    return coords
+      ? `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+      : '';
+  }
+
+  function resetQR() {
+    setQrPos({ x: 210, y: 370 });
+    qrLast.current = { x: 210, y: 370 };
+  }
 
   async function pickImageFromGallery() {
     if (!mediaPermission?.granted) await requestMediaPermission();
@@ -29,6 +65,7 @@ export default function App() {
     if (!result.canceled && result.assets.length > 0) {
       let coords = await fetchLocation();
       setPhoto({ uri: result.assets[0].uri, coords });
+      resetQR();
     }
   }
 
@@ -39,6 +76,7 @@ export default function App() {
         let coords = await fetchLocation();
         const capturedPhoto = await cameraRef.current.takePictureAsync({ flash });
         setPhoto({ uri: capturedPhoto.uri, coords });
+        resetQR();
       } catch (e) { alert('Error: ' + e); }
       setLoading(false);
     }
@@ -50,22 +88,6 @@ export default function App() {
     return res.coords;
   }
 
-  function getMapURL(coords) {
-    return coords
-      ? `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
-      : '';
-  }
-
-  function renderQRCode() {
-    if (!photo?.coords) return null;
-    return (
-      <View style={styles.qrContainerInImage}>
-        <QRCode value={getMapURL(photo.coords)} size={90} color="#000" backgroundColor="white" />
-      </View>
-    );
-  }
-
-  // Save stamped (flattened) image. No preview of new image shown.
   async function captureAndSave() {
     if (viewShotRef.current && mediaPermission?.granted && photo) {
       try {
@@ -74,7 +96,7 @@ export default function App() {
         await MediaLibrary.createAssetAsync(uri);
         setLoading(false);
         alert('Flattened image saved to gallery!');
-        setPhoto(null); // Go back to camera/select after save
+        setPhoto(null);
       } catch (e) {
         setLoading(false);
         alert('Save failed: ' + e);
@@ -102,45 +124,65 @@ export default function App() {
     );
 
   return (
-    <View style={styles.container}>
-      {!photo ? (
-        <>
-          <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.actionBtn} onPress={toggleCameraFacing}>
-              <Text style={styles.actionText}>Flip</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={toggleFlash}>
-              <Text style={styles.actionText}>{flash === 'on' ? 'Flash On' : 'Flash Off'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.shutterButton, loading && { backgroundColor: '#999' }]}
-              onPress={takePicture}
-              disabled={loading}
-            />
-            <TouchableOpacity style={styles.actionBtn} onPress={pickImageFromGallery}>
-              <Text style={styles.actionText}>Gallery</Text>
-            </TouchableOpacity>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        {!photo ? (
+          <>
+            <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}>
+                <Text style={styles.actionText}>Flip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setFlash(flash === 'off' ? 'on' : 'off')}>
+                <Text style={styles.actionText}>{flash === 'on' ? 'Flash On' : 'Flash Off'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.shutterButton, loading && { backgroundColor: '#999' }]}
+                onPress={takePicture}
+                disabled={loading}
+              />
+              <TouchableOpacity style={styles.actionBtn} onPress={pickImageFromGallery}>
+                <Text style={styles.actionText}>Gallery</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <View style={styles.preview}>
+            <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
+              <Image source={{ uri: photo.uri }} style={styles.previewImage} />
+              <PanGestureHandler onGestureEvent={onDragGesture}>
+                <View
+                  style={[
+                    styles.qrContainerInImage,
+                    {
+                      left: qrPos.x,
+                      top: qrPos.y,
+                      width: QR_SIZE,
+                      height: QR_SIZE,
+                    },
+                  ]}
+                >
+                  <QRCode
+                    value={getMapURL(photo.coords)}
+                    size={QR_SIZE}
+                    color="#000"
+                    backgroundColor="white"
+                  />
+                </View>
+              </PanGestureHandler>
+            </View>
+            <View style={styles.saveRow}>
+              <TouchableOpacity style={styles.saveButton} onPress={captureAndSave} disabled={loading}>
+                <Text style={styles.saveText}>{loading ? 'Saving...' : 'Save Stamped'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setPhoto(null)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </>
-      ) : (
-        <View style={styles.preview}>
-          {/* Only this compositePreview is captured to flatten/save - QR is inside image bounds */}
-          <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
-            <Image source={{ uri: photo.uri }} style={styles.previewImage} />
-            {renderQRCode()}
-          </View>
-          <View style={styles.saveRow}>
-            <TouchableOpacity style={styles.saveButton} onPress={captureAndSave} disabled={loading}>
-              <Text style={styles.saveText}>{loading ? 'Saving...' : 'Save Stamped'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setPhoto(null)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
+        )}
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -172,8 +214,8 @@ const styles = StyleSheet.create({
   },
   preview: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   compositePreview: {
-    width: 320,
-    height: 500,
+    width: IMAGE_WIDTH,
+    height: IMAGE_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -181,8 +223,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#333'
   },
   previewImage: {
-    width: 320,
-    height: 500,
+    width: IMAGE_WIDTH,
+    height: IMAGE_HEIGHT,
     resizeMode: 'cover',
     borderRadius: 10,
     position: 'absolute',
@@ -191,12 +233,12 @@ const styles = StyleSheet.create({
   },
   qrContainerInImage: {
     position: 'absolute',
-    bottom: 16,
-    right: 16,
     backgroundColor: 'white',
     padding: 5,
     borderRadius: 8,
-    elevation: 10
+    elevation: 10,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   saveRow: { flexDirection: 'row', marginTop: 24, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#38C172', padding: 12, borderRadius: 8, marginRight: 20 },
