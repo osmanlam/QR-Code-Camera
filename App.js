@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image, Button } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
@@ -10,7 +11,9 @@ import { PanGestureHandler, GestureHandlerRootView, State } from 'react-native-g
 
 const IMAGE_WIDTH = 320;
 const IMAGE_HEIGHT = 500;
-const QR_SIZE = 90;
+const MIN_QR_SIZE = 40;
+const MAX_QR_SIZE = 180;
+const DEFAULT_QR_SIZE = 90;
 
 export default function App() {
   const cameraRef = useRef(null);
@@ -24,8 +27,9 @@ export default function App() {
   const [photo, setPhoto] = useState(null); // {uri, coords}
   const [loading, setLoading] = useState(false);
 
-  // QR code position
+  // QR code position and size
   const [qrPos, setQrPos] = useState({ x: 210, y: 370 });
+  const [qrSize, setQrSize] = useState(DEFAULT_QR_SIZE);
   const qrLast = useRef({ x: 210, y: 370 });
 
   // Drag logic
@@ -33,20 +37,30 @@ export default function App() {
     if (evt.nativeEvent.state === State.ACTIVE) {
       let x = qrLast.current.x + evt.nativeEvent.translationX;
       let y = qrLast.current.y + evt.nativeEvent.translationY;
-      x = Math.max(0, Math.min(x, IMAGE_WIDTH - QR_SIZE));
-      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - QR_SIZE));
+      x = Math.max(0, Math.min(x, IMAGE_WIDTH - qrSize));
+      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - qrSize));
       setQrPos({ x, y });
     }
     if (evt.nativeEvent.state === State.END || evt.nativeEvent.state === State.CANCELLED) {
       let x = qrLast.current.x + evt.nativeEvent.translationX;
       let y = qrLast.current.y + evt.nativeEvent.translationY;
-      x = Math.max(0, Math.min(x, IMAGE_WIDTH - QR_SIZE));
-      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - QR_SIZE));
+      x = Math.max(0, Math.min(x, IMAGE_WIDTH - qrSize));
+      y = Math.max(0, Math.min(y, IMAGE_HEIGHT - qrSize));
       qrLast.current.x = x;
       qrLast.current.y = y;
       setQrPos({ x, y });
     }
   };
+
+  // When slider changes, update QR size and clamp position if needed
+  function onQRSizeChange(newSize) {
+    const x = Math.max(0, Math.min(qrLast.current.x, IMAGE_WIDTH - newSize));
+    const y = Math.max(0, Math.min(qrLast.current.y, IMAGE_HEIGHT - newSize));
+    setQrPos({ x, y });
+    qrLast.current.x = x;
+    qrLast.current.y = y;
+    setQrSize(newSize);
+  }
 
   function getMapURL(coords) {
     return coords
@@ -57,6 +71,7 @@ export default function App() {
   function resetQR() {
     setQrPos({ x: 210, y: 370 });
     qrLast.current = { x: 210, y: 370 };
+    setQrSize(DEFAULT_QR_SIZE);
   }
 
   async function pickImageFromGallery() {
@@ -157,19 +172,34 @@ export default function App() {
                     {
                       left: qrPos.x,
                       top: qrPos.y,
-                      width: QR_SIZE,
-                      height: QR_SIZE,
+                      width: qrSize,
+                      height: qrSize,
                     },
                   ]}
                 >
                   <QRCode
                     value={getMapURL(photo.coords)}
-                    size={QR_SIZE}
+                    size={qrSize}
                     color="#000"
                     backgroundColor="white"
                   />
                 </View>
               </PanGestureHandler>
+            </View>
+            <View style={styles.sliderRow}>
+              <Text style={{ color: '#fff', marginRight: 10 }}>QR size</Text>
+              <Slider
+                style={{ width: 200 }}
+                minimumValue={MIN_QR_SIZE}
+                maximumValue={MAX_QR_SIZE}
+                value={qrSize}
+                step={1}
+                onValueChange={onQRSizeChange}
+                minimumTrackTintColor="#38C172"
+                maximumTrackTintColor="#eee"
+                thumbTintColor="#38C172"
+              />
+              <Text style={{ color: '#fff', marginLeft: 10 }}>{Math.round(qrSize)} px</Text>
             </View>
             <View style={styles.saveRow}>
               <TouchableOpacity style={styles.saveButton} onPress={captureAndSave} disabled={loading}>
@@ -197,6 +227,13 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'space-around',
     alignItems: 'center'
+  },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    marginTop: 16,
+    marginBottom: 8
   },
   actionBtn: {
     backgroundColor: '#2e8b57',
@@ -240,7 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  saveRow: { flexDirection: 'row', marginTop: 24, alignItems: 'center', justifyContent: 'center' },
+  saveRow: { flexDirection: 'row', marginTop: 20, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#38C172', padding: 12, borderRadius: 8, marginRight: 20 },
   saveText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   cancelButton: { backgroundColor: '#e85d04', padding: 12, borderRadius: 8 },
