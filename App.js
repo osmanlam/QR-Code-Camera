@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, Button, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, Button } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
@@ -16,35 +16,22 @@ export default function App() {
   const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
 
   const [photo, setPhoto] = useState(null); // {uri, coords}
-  const [location, setLocation] = useState(null);
-  const [stampedURI, setStampedURI] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const viewShotRef = useRef();
 
-  // Toggle between front/back camera
-  function toggleCameraFacing() {
-    setFacing(cur => (cur === 'back' ? 'front' : 'back'));
-  }
+  function toggleCameraFacing() { setFacing(cur => (cur === 'back' ? 'front' : 'back')); }
+  function toggleFlash() { setFlash(cur => (cur === 'off' ? 'on' : 'off')); }
 
-  // Toggle flash state
-  function toggleFlash() {
-    setFlash(cur => (cur === 'off' ? 'on' : 'off'));
-  }
-
-  // Pick an image from gallery
   async function pickImageFromGallery() {
     if (!mediaPermission?.granted) await requestMediaPermission();
     let result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
     if (!result.canceled && result.assets.length > 0) {
-      // On gallery pick, fetch location for QR
       let coords = await fetchLocation();
       setPhoto({ uri: result.assets[0].uri, coords });
-      setStampedURI(null);
     }
   }
 
-  // Capture image from camera and fetch location
   async function takePicture() {
     if (cameraRef.current) {
       try {
@@ -52,10 +39,7 @@ export default function App() {
         let coords = await fetchLocation();
         const capturedPhoto = await cameraRef.current.takePictureAsync({ flash });
         setPhoto({ uri: capturedPhoto.uri, coords });
-        setStampedURI(null);
-      } catch (e) {
-        alert('Error: ' + e);
-      }
+      } catch (e) { alert('Error: ' + e); }
       setLoading(false);
     }
   }
@@ -63,7 +47,6 @@ export default function App() {
   async function fetchLocation() {
     if (!locationPermission?.granted) await requestLocationPermission();
     const res = await Location.getCurrentPositionAsync({});
-    setLocation(res.coords);
     return res.coords;
   }
 
@@ -76,22 +59,22 @@ export default function App() {
   function renderQRCode() {
     if (!photo?.coords) return null;
     return (
-      <View style={styles.qrContainer}>
-        <QRCode value={getMapURL(photo.coords)} size={100} color="#000" backgroundColor="white" />
+      <View style={styles.qrContainerInImage}>
+        <QRCode value={getMapURL(photo.coords)} size={90} color="#000" backgroundColor="white" />
       </View>
     );
   }
 
-  // Save stamped (flattened) image
+  // Save stamped (flattened) image. No preview of new image shown.
   async function captureAndSave() {
     if (viewShotRef.current && mediaPermission?.granted && photo) {
       try {
         setLoading(true);
         const uri = await captureRef(viewShotRef, { format: 'jpg', quality: 0.9 });
-        setStampedURI(uri);
         await MediaLibrary.createAssetAsync(uri);
         setLoading(false);
         alert('Flattened image saved to gallery!');
+        setPhoto(null); // Go back to camera/select after save
       } catch (e) {
         setLoading(false);
         alert('Save failed: ' + e);
@@ -101,7 +84,6 @@ export default function App() {
     }
   }
 
-  // Permissions UI
   if (!permission) return <View />;
   if (!permission.granted)
     return (
@@ -110,8 +92,7 @@ export default function App() {
         <Button onPress={requestPermission} title="Grant camera permission" />
       </View>
     );
-  if (!locationPermission)
-    return <View />;
+  if (!locationPermission) return <View />;
   if (!locationPermission.granted)
     return (
       <View style={styles.container}>
@@ -144,7 +125,7 @@ export default function App() {
         </>
       ) : (
         <View style={styles.preview}>
-          {/* "viewShotRef" wraps photo+QR for flatten&save */}
+          {/* Only this compositePreview is captured to flatten/save - QR is inside image bounds */}
           <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
             <Image source={{ uri: photo.uri }} style={styles.previewImage} />
             {renderQRCode()}
@@ -157,12 +138,6 @@ export default function App() {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-          {stampedURI && (
-            <View style={{ marginTop: 20 }}>
-              <Text style={{ color: 'white' }}>Stamped image preview:</Text>
-              <Image source={{ uri: stampedURI }} style={styles.previewImageSmall} />
-            </View>
-          )}
         </View>
       )}
     </View>
@@ -196,13 +171,36 @@ const styles = StyleSheet.create({
     alignSelf: 'center'
   },
   preview: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  compositePreview: { width: 320, height: 500, alignItems: 'center', justifyContent: 'center' },
-  previewImage: { width: 320, height: 500, resizeMode: 'contain', borderRadius: 10 },
-  qrContainer: { position: 'absolute', bottom: 20, right: 20, backgroundColor: 'white', padding: 5, borderRadius: 8, elevation: 10 },
+  compositePreview: {
+    width: 320,
+    height: 500,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#333'
+  },
+  previewImage: {
+    width: 320,
+    height: 500,
+    resizeMode: 'cover',
+    borderRadius: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0
+  },
+  qrContainerInImage: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 8,
+    elevation: 10
+  },
   saveRow: { flexDirection: 'row', marginTop: 24, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#38C172', padding: 12, borderRadius: 8, marginRight: 20 },
   saveText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   cancelButton: { backgroundColor: '#e85d04', padding: 12, borderRadius: 8 },
-  cancelText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  previewImageSmall: { width: 120, height: 180, marginTop: 8, borderRadius: 8 }
+  cancelText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
 });
