@@ -14,6 +14,7 @@ const IMAGE_HEIGHT = 500;
 const MIN_QR_SIZE = 40;
 const MAX_QR_SIZE = 180;
 const DEFAULT_QR_SIZE = 90;
+const DEFAULT_QR_COLOR = '#000';
 
 export default function App() {
   const cameraRef = useRef(null);
@@ -27,9 +28,10 @@ export default function App() {
   const [photo, setPhoto] = useState(null); // {uri, coords}
   const [loading, setLoading] = useState(false);
 
-  // QR code position and size
+  // QR code position, size, color
   const [qrPos, setQrPos] = useState({ x: 210, y: 370 });
   const [qrSize, setQrSize] = useState(DEFAULT_QR_SIZE);
+  const [qrColor, setQrColor] = useState(DEFAULT_QR_COLOR);
   const qrLast = useRef({ x: 210, y: 370 });
 
   // Drag logic
@@ -52,7 +54,6 @@ export default function App() {
     }
   };
 
-  // When slider changes, update QR size and clamp position if needed
   function onQRSizeChange(newSize) {
     const x = Math.max(0, Math.min(qrLast.current.x, IMAGE_WIDTH - newSize));
     const y = Math.max(0, Math.min(qrLast.current.y, IMAGE_HEIGHT - newSize));
@@ -72,6 +73,7 @@ export default function App() {
     setQrPos({ x: 210, y: 370 });
     qrLast.current = { x: 210, y: 370 };
     setQrSize(DEFAULT_QR_SIZE);
+    setQrColor(DEFAULT_QR_COLOR);
   }
 
   async function pickImageFromGallery() {
@@ -119,6 +121,10 @@ export default function App() {
     } else {
       requestMediaPermission();
     }
+  }
+
+  function selectPresetColor(color) {
+    setQrColor(color);
   }
 
   if (!permission) return <View />;
@@ -180,12 +186,13 @@ export default function App() {
                   <QRCode
                     value={getMapURL(photo.coords)}
                     size={qrSize}
-                    color="#000"
+                    color={qrColor}
                     backgroundColor="white"
                   />
                 </View>
               </PanGestureHandler>
             </View>
+            {/* QR Size Slider */}
             <View style={styles.sliderRow}>
               <Text style={{ color: '#fff', marginRight: 10 }}>QR size</Text>
               <Slider
@@ -200,6 +207,16 @@ export default function App() {
                 thumbTintColor="#38C172"
               />
               <Text style={{ color: '#fff', marginLeft: 10 }}>{Math.round(qrSize)} px</Text>
+            </View>
+            {/* Only color presets remain */}
+            <View style={styles.colorRow}>
+              {['#000', '#2e8b57', '#e85d04', '#005af0', '#222', '#ff0000', '#edff21'].map(preset => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.colorPresetCircle, { backgroundColor: preset, borderWidth: preset === qrColor ? 2 : 0 }]}
+                  onPress={() => selectPresetColor(preset)}
+                />
+              ))}
             </View>
             <View style={styles.saveRow}>
               <TouchableOpacity style={styles.saveButton} onPress={captureAndSave} disabled={loading}>
@@ -232,8 +249,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 30,
-    marginTop: 16,
-    marginBottom: 8
+    marginTop: 14,
+    marginBottom: 7
+  },
+  colorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    marginBottom: -6
+  },
+  colorPresetCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginHorizontal: 6,
+    marginVertical: 2,
+    borderColor: '#fff'
   },
   actionBtn: {
     backgroundColor: '#2e8b57',
@@ -277,7 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  saveRow: { flexDirection: 'row', marginTop: 20, alignItems: 'center', justifyContent: 'center' },
+  saveRow: { flexDirection: 'row', marginTop: 16, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#38C172', padding: 12, borderRadius: 8, marginRight: 20 },
   saveText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   cancelButton: { backgroundColor: '#e85d04', padding: 12, borderRadius: 8 },
