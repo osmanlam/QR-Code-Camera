@@ -183,12 +183,12 @@ export default function App() {
                     },
                   ]}
                 >
-                  <QRCode
-                    value={getMapURL(photo.coords)}
-                    size={qrSize}
-                    color={qrColor}
-                    backgroundColor="white"
-                  />
+                <QRCode
+                  value={getMapURL(photo.coords)}
+                  size={qrSize}
+                  color={qrColor}
+                  backgroundColor="transparent"
+                />
                 </View>
               </PanGestureHandler>
             </View>
@@ -208,7 +208,6 @@ export default function App() {
               />
               <Text style={{ color: '#fff', marginLeft: 10 }}>{Math.round(qrSize)} px</Text>
             </View>
-            {/* Only color presets remain */}
             <View style={styles.colorRow}>
               {['#000', '#2e8b57', '#e85d04', '#005af0', '#222', '#ff0000', '#edff21'].map(preset => (
                 <TouchableOpacity
@@ -302,12 +301,12 @@ const styles = StyleSheet.create({
   },
   qrContainerInImage: {
     position: 'absolute',
-    backgroundColor: 'white',
-    padding: 5,
+    padding: 0,
     borderRadius: 8,
     elevation: 10,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    backgroundColor: 'transparent'
   },
   saveRow: { flexDirection: 'row', marginTop: 16, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#38C172', padding: 12, borderRadius: 8, marginRight: 20 },
