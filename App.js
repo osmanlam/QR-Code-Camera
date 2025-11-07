@@ -1,72 +1,114 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, Button } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, Button, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
+import QRCode from 'react-native-qrcode-svg';
+import { captureRef } from 'react-native-view-shot';
 
 export default function App() {
-  // Use string fallback instead of CameraType.back
-  const [facing, setFacing] = useState('back'); // 'front' or 'back'
+  const [facing, setFacing] = useState('back');
+  const cameraRef = useRef(null);
 
   const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef(null);
-  const [photo, setPhoto] = useState(null);
-
-  // For saving to gallery permission
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+  const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
 
-  // Toggle between front/back camera
-  function toggleCameraFacing() {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  const [location, setLocation] = useState(null);
+  const [photo, setPhoto] = useState(null);
+  const [stampedURI, setStampedURI] = useState(null); // URI of image with QR code stamped
+
+  const viewShotRef = useRef();
+
+  // Fetch coordinates when taking photo
+  async function fetchLocation() {
+    if (!locationPermission?.granted) await requestLocationPermission();
+    const res = await Location.getCurrentPositionAsync({});
+    setLocation(res.coords);
+    return res.coords;
   }
 
-  // Take a photo
+  function toggleCameraFacing() {
+    setFacing(cur => (cur === 'back' ? 'front' : 'back'));
+  }
+
   async function takePicture() {
     if (cameraRef.current) {
       try {
+        const coords = await fetchLocation();
         const capturedPhoto = await cameraRef.current.takePictureAsync();
-        setPhoto(capturedPhoto.uri);
+        setPhoto({ uri: capturedPhoto.uri, coords });
+        // clear previous stamp and stampURI
+        setStampedURI(null);
       } catch (e) {
-        alert('Error taking photo: ' + e);
+        alert('Error: ' + e);
       }
     }
   }
 
-  // Save photo to gallery
-  async function savePhoto() {
-    if (photo && mediaPermission?.granted) {
-      await MediaLibrary.createAssetAsync(photo);
-      alert('Saved to gallery!');
-      setPhoto(null);
+  // Generate QR Code value (Google Maps link)
+  function getMapURL(coords) {
+    return coords
+      ? `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+      : '';
+  }
+
+  // Render QR code with the map link
+  function renderQRCode() {
+    if (!photo?.coords) return null;
+    return (
+      <View style={styles.qrContainer}>
+        <QRCode
+          value={getMapURL(photo.coords)}
+          size={100}
+          color="#000"
+          backgroundColor="white"
+        />
+      </View>
+    );
+  }
+
+  // Capture the preview with QR and save to gallery
+  async function captureAndSave() {
+    if (viewShotRef.current && mediaPermission?.granted && photo) {
+      try {
+        const uri = await captureRef(viewShotRef, { format: 'jpg', quality: 0.9 });
+        setStampedURI(uri);
+        await MediaLibrary.createAssetAsync(uri);
+        alert('Stamped photo saved to gallery!');
+      } catch (e) {
+        alert('Save failed: ' + e);
+      }
     } else {
       requestMediaPermission();
     }
   }
 
-  // Permission checks and prompts
-  if (!permission) {
-    // Loading permission
-    return <View />;
-  }
-  if (!permission.granted) {
-    // Permission denied
+  // Permissions UI
+  if (!permission) return <View />;
+  if (!permission.granted)
     return (
       <View style={styles.container}>
         <Text style={styles.message}>We need your permission to show the camera</Text>
-        <Button onPress={requestPermission} title="Grant permission" />
+        <Button onPress={requestPermission} title="Grant camera permission" />
       </View>
     );
-  }
+  if (!locationPermission)
+    return <View />;
+  if (!locationPermission.granted)
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>We need your permission to fetch your GPS location</Text>
+        <Button onPress={requestLocationPermission} title="Grant location permission" />
+      </View>
+    );
 
   // Main UI
   return (
     <View style={styles.container}>
       {!photo ? (
         <>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={facing}
-          />
+          <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
               <Text style={styles.text}>Flip</Text>
@@ -76,15 +118,25 @@ export default function App() {
         </>
       ) : (
         <View style={styles.preview}>
-          <Image source={{ uri: photo }} style={styles.previewImage} />
+          {/* "viewShotRef" wraps photo+QR for flatten&save */}
+          <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
+            <Image source={{ uri: photo.uri }} style={styles.previewImage} />
+            {renderQRCode()}
+          </View>
           <View style={styles.saveRow}>
-            <TouchableOpacity style={styles.saveButton} onPress={savePhoto}>
-              <Text style={styles.saveText}>Save to Gallery</Text>
+            <TouchableOpacity style={styles.saveButton} onPress={captureAndSave}>
+              <Text style={styles.saveText}>Save Stamped</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelButton} onPress={() => setPhoto(null)}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
+          {stampedURI && (
+            <View style={{ marginTop: 20 }}>
+              <Text style={{ color: 'white' }}>Stamped image preview:</Text>
+              <Image source={{ uri: stampedURI }} style={styles.previewImageSmall} />
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -140,10 +192,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  compositePreview: {
+    width: 320,
+    height: 500,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   previewImage: {
-    width: '90%',
-    height: '75%',
-    resizeMode: 'contain'
+    width: 320,
+    height: 500,
+    resizeMode: 'contain',
+    borderRadius: 10
+  },
+  qrContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 8,
+    elevation: 10
   },
   saveRow: {
     flexDirection: 'row',
@@ -171,5 +239,11 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16
+  },
+  previewImageSmall: {
+    width: 120,
+    height: 180,
+    marginTop: 8,
+    borderRadius: 8
   }
 });
