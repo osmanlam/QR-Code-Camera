@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { View, Image, Text, TouchableOpacity, Alert } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Image, Text, TouchableOpacity, Alert, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { State } from 'react-native-gesture-handler';
 import { captureRef } from 'react-native-view-shot';
@@ -15,6 +15,18 @@ export default function PreviewComponent({ photo, onClose }) {
   const [qrSize, setQrSize] = useState(DEFAULT_QR_SIZE);
   const [qrColor, setQrColor] = useState(DEFAULT_QR_COLOR);
   const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [lastError, setLastError] = useState(null);
+  const searchTimer = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, []);
 
   function onDragGesture(evt) {
     if (evt.nativeEvent.state === State.ACTIVE) {
@@ -45,9 +57,97 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function getMapURL(coords) {
-    return coords
-      ? `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+    // prefer a user-selected location; fall back to photo coords
+    const c = selectedLocation || coords;
+    return c && c.latitude
+      ? `https://www.google.com/maps/search/?api=1&query=${c.latitude},${c.longitude}`
       : '';
+  }
+
+  async function searchPlaces(q) {
+    if (!q || q.length < 2) {
+      setSuggestions([]);
+      setLastError(null);
+      return;
+    }
+    setSearching(true);
+    setLastError(null);
+    try {
+      // Primary: Photon (works well from web and native)
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`;
+      const pres = await fetch(photonUrl);
+      if (pres.ok) {
+        const pjson = await pres.json();
+        const features = pjson && pjson.features ? pjson.features : [];
+        if (features.length > 0) {
+          const mapped = features.map(f => {
+            const props = f.properties || {};
+            const title = props.name || props.street || props.osm_key || props.city || props.country || props.state || props.type || 'Unknown';
+            const subtitleParts = [];
+            if (props.city && props.city !== title) subtitleParts.push(props.city);
+            if (props.state) subtitleParts.push(props.state);
+            if (props.country) subtitleParts.push(props.country);
+            const subtitle = subtitleParts.join(', ');
+            return {
+              id: `${f.properties.osm_type || 'ph'}_${f.properties.osm_id || f.properties.osm_id}`,
+              display_name: props.name ? `${props.name}${subtitle ? ', ' + subtitle : ''}` : (f.properties.osm_key || subtitle),
+              title,
+              subtitle,
+              lat: String(f.geometry.coordinates[1]),
+              lon: String(f.geometry.coordinates[0])
+            };
+          });
+          setSuggestions(mapped);
+          setSearching(false);
+          return;
+        }
+      }
+
+      // Fallback: try Nominatim if Photon returns nothing or errors
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'QR-Code-Camera/1.0 (youremail@example.com)' } });
+      if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+      const json = await res.json();
+      if (json && json.length > 0) {
+        const mapped = json.map((it, idx) => ({
+          id: it.place_id ? String(it.place_id) : `nomin_${idx}`,
+          display_name: it.display_name,
+          title: it.display_name ? it.display_name.split(',')[0] : it.type || 'Unknown',
+          subtitle: it.display_name ? it.display_name.split(',').slice(1).join(', ') : '',
+          lat: String(it.lat),
+          lon: String(it.lon)
+        }));
+        setSuggestions(mapped);
+        setSearching(false);
+        return;
+      }
+
+      setSuggestions([]);
+      setLastError('No results found');
+    } catch (e) {
+      console.warn('Search failed', e);
+      setSuggestions([]);
+      setLastError(String(e));
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function onQueryChange(text) {
+    setQuery(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => searchPlaces(text), 350);
+  }
+
+  function selectPlace(item) {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      setSelectedLocation({ latitude: lat, longitude: lon, display_name: item.display_name });
+      // update suggestions and query
+      setSuggestions([]);
+      setQuery(item.display_name);
+    }
   }
 
   function resetQR() {
@@ -78,8 +178,57 @@ export default function PreviewComponent({ photo, onClose }) {
 
   return (
     <View style={styles.preview}>
+      {/* Search bar + suggestions */}
+      <View style={{ width: IMAGE_WIDTH, padding: 8 }}>
+        <TextInput
+          placeholder="Search place (like Google Maps)"
+          placeholderTextColor="#ccc"
+          value={query}
+          onChangeText={onQueryChange}
+          onSubmitEditing={() => searchPlaces(query)}
+          style={{ backgroundColor: '#222', color: '#fff', padding: 8, borderRadius: 6 }}
+        />
+        {searching ? (
+          <View style={{ padding: 8 }}>
+            <ActivityIndicator size="small" color="#38C172" />
+          </View>
+        ) : null}
+        {suggestions && suggestions.length > 0 ? (
+          <FlatList
+            data={suggestions}
+            keyExtractor={item => item.id || `${item.lat}_${item.lon}`}
+            style={{ maxHeight: 220, marginTop: 6, backgroundColor: '#111', borderRadius: 6 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity onPress={() => selectPlace(item)} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#222' }}>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{item.title || item.display_name}</Text>
+                {item.subtitle ? <Text style={{ color: '#ccc', fontSize: 12 }}>{item.subtitle}</Text> : null}
+              </TouchableOpacity>
+            )}
+          />
+        ) : null}
+        {!searching && query && query.length >= 2 && suggestions && suggestions.length === 0 ? (
+          <View style={{ padding: 8 }}>
+            <Text style={{ color: '#fff', opacity: 0.8 }}>{lastError || 'No results'}</Text>
+          </View>
+        ) : null}
+        {selectedLocation ? (
+          <Text style={{ color: '#fff', marginTop: 6 }}>Selected: {selectedLocation.display_name}</Text>
+        ) : null}
+      </View>
       <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
         <Image source={{ uri: photo.uri }} style={styles.previewImage} />
+        {/* Selected location badge on top of image */}
+        {selectedLocation ? (
+          <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 6 }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600', maxWidth: 220 }} numberOfLines={2}>
+              {selectedLocation.display_name}
+            </Text>
+            <Text style={{ color: '#ddd', fontSize: 11 }}>
+              {selectedLocation.latitude.toFixed(6)},{' '}
+              {selectedLocation.longitude.toFixed(6)}
+            </Text>
+          </View>
+        ) : null}
         <QRCodeOverlay
           pos={qrPos}
           size={qrSize}
