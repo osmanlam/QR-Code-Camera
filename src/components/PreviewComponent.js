@@ -73,57 +73,42 @@ export default function PreviewComponent({ photo, onClose }) {
     setSearching(true);
     setLastError(null);
     try {
-      // Primary: Photon (works well from web and native)
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`;
-      const pres = await fetch(photonUrl);
-      if (pres.ok) {
-        const pjson = await pres.json();
-        const features = pjson && pjson.features ? pjson.features : [];
-        if (features.length > 0) {
-          const mapped = features.map(f => {
-            const props = f.properties || {};
-            const title = props.name || props.street || props.osm_key || props.city || props.country || props.state || props.type || 'Unknown';
-            const subtitleParts = [];
-            if (props.city && props.city !== title) subtitleParts.push(props.city);
-            if (props.state) subtitleParts.push(props.state);
-            if (props.country) subtitleParts.push(props.country);
-            const subtitle = subtitleParts.join(', ');
-            return {
-              id: `${f.properties.osm_type || 'ph'}_${f.properties.osm_id || f.properties.osm_id}`,
-              display_name: props.name ? `${props.name}${subtitle ? ', ' + subtitle : ''}` : (f.properties.osm_key || subtitle),
-              title,
-              subtitle,
-              lat: String(f.geometry.coordinates[1]),
-              lon: String(f.geometry.coordinates[0])
-            };
-          });
-          setSuggestions(mapped);
-          setSearching(false);
-          return;
-        }
-      }
-
-      // Fallback: try Nominatim if Photon returns nothing or errors
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'QR-Code-Camera/1.0 (youremail@example.com)' } });
-      if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+      const res = await fetch(photonUrl);
+      if (!res.ok) throw new Error(`Photon ${res.status}`);
       const json = await res.json();
-      if (json && json.length > 0) {
-        const mapped = json.map((it, idx) => ({
-          id: it.place_id ? String(it.place_id) : `nomin_${idx}`,
-          display_name: it.display_name,
-          title: it.display_name ? it.display_name.split(',')[0] : it.type || 'Unknown',
-          subtitle: it.display_name ? it.display_name.split(',').slice(1).join(', ') : '',
-          lat: String(it.lat),
-          lon: String(it.lon)
-        }));
-        setSuggestions(mapped);
-        setSearching(false);
+      const features = json && json.features ? json.features : [];
+      if (!features || features.length === 0) {
+        setSuggestions([]);
+        setLastError('No results found');
         return;
       }
 
-      setSuggestions([]);
-      setLastError('No results found');
+      const mapped = features.map((f, idx) => {
+        const props = f.properties || {};
+        const title = props.name || props.street || props.osm_key || props.city || props.country || props.state || props.type || 'Unknown';
+        const subtitleParts = [];
+        if (props.city && props.city !== title) subtitleParts.push(props.city);
+        if (props.state) subtitleParts.push(props.state);
+        if (props.country) subtitleParts.push(props.country);
+        const subtitle = subtitleParts.join(', ');
+        const lat = f.geometry && f.geometry.coordinates ? String(f.geometry.coordinates[1]) : '';
+        const lon = f.geometry && f.geometry.coordinates ? String(f.geometry.coordinates[0]) : '';
+        // Build a stable, unique id using available osm id/type and fallback to index+coords
+        const osmId = props.osm_id || props.osmID || '';
+        const osmType = props.osm_type || props.osmType || 'ph';
+        const id = osmId ? `${osmType}_${osmId}` : `${osmType}_${idx}_${lat}_${lon}`;
+        return {
+          id,
+          display_name: props.name ? `${props.name}${subtitle ? ', ' + subtitle : ''}` : (props.osm_key || subtitle),
+          title,
+          subtitle,
+          lat,
+          lon
+        };
+      });
+
+      setSuggestions(mapped);
     } catch (e) {
       console.warn('Search failed', e);
       setSuggestions([]);
