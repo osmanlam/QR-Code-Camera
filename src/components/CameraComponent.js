@@ -67,22 +67,29 @@ export default function CameraComponent({ onPhotoSelected }) {
           <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
         </View>
       </View>
-      <View style={styles.buttonRow}>
+      {/* Flash toggle outside the preview (top-right of the container) */}
+      <TouchableOpacity
+        style={{ position: 'absolute', top: 12, right: 12, backgroundColor: '#2e8b57', padding: 8, borderRadius: 8, zIndex: 20 }}
+        onPress={() => setFlash(f => (f === 'off' ? 'on' : 'off'))}
+      >
+        <Text style={styles.actionText}>{flash === 'on' ? 'Flash On' : 'Flash Off'}</Text>
+      </TouchableOpacity>
+      {/* Bottom action row (left/right) - shutter is centered separately */}
+      <View style={[styles.buttonRow, { justifyContent: 'space-between', paddingHorizontal: 40 }]}> 
         <TouchableOpacity style={styles.actionBtn} onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}>
           <Text style={styles.actionText}>Flip</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setFlash(f => (f === 'off' ? 'on' : 'off'))}>
-          <Text style={styles.actionText}>{flash === 'on' ? 'Flash On' : 'Flash Off'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.shutterButton, loading && { backgroundColor: '#999' }]}
-          onPress={takePicture}
-          disabled={loading}
-        />
         <TouchableOpacity style={styles.actionBtn} onPress={pickImageFromGallery}>
           <Text style={styles.actionText}>Gallery</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Centered shutter button */}
+      <TouchableOpacity
+        style={[styles.shutterButton, { position: 'absolute', bottom: 40, left: '50%', marginLeft: -30 }, loading && { backgroundColor: '#999' }]}
+        onPress={takePicture}
+        disabled={loading}
+      />
     </View>
   );
 }
