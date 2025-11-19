@@ -62,7 +62,11 @@ export default function CameraComponent({ onPhotoSelected }) {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
+      <View style={styles.cameraPreviewWrapper}>
+        <View style={styles.cameraPreview}>
+          <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
+        </View>
+      </View>
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}>
           <Text style={styles.actionText}>Flip</Text>

@@ -9,9 +9,20 @@ export const DEFAULT_QR_COLOR = '#000';
 export const DEFAULT_FLASH = 'off';
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#222' },
+  container: { flex: 1, backgroundColor: '#000' },
   message: { textAlign: 'center', paddingBottom: 15, color: 'white', fontSize: 16 },
-  camera: { flex: 1 },
+  camera: { width: IMAGE_WIDTH, height: IMAGE_HEIGHT },
+  // keep some bottom padding so the centered preview sits above the absolute-positioned controls
+  cameraPreviewWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 120 },
+  cameraPreview: {
+    width: IMAGE_WIDTH,
+    height: IMAGE_HEIGHT,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   buttonRow: {
     position: 'absolute',
     bottom: 40,
