@@ -185,7 +185,7 @@ export default function PreviewComponent({ photo, onClose }) {
       {/* Search bar + suggestions */}
       <View style={{ width: IMAGE_WIDTH, padding: 8 }}>
         <TextInput
-          placeholder="Search place (like Google Maps)"
+          placeholder="Search place"
           placeholderTextColor="#ccc"
           value={query}
           onChangeText={onQueryChange}
@@ -226,24 +226,11 @@ export default function PreviewComponent({ photo, onClose }) {
           ) : null}
         </View>
 
-        {selectedLocation ? (
-          <Text style={{ color: '#fff', marginTop: 6 }}>Selected: {selectedLocation.display_name}</Text>
-        ) : null}
+        {/* selectedLocation label intentionally hidden from the stamped image UI */}
       </View>
       <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
         <Image source={{ uri: photo.uri }} style={styles.previewImage} />
-        {/* Selected location badge on top of image */}
-        {selectedLocation ? (
-          <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 6 }}>
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600', maxWidth: 220 }} numberOfLines={2}>
-              {selectedLocation.display_name}
-            </Text>
-            <Text style={{ color: '#ddd', fontSize: 11 }}>
-              {selectedLocation.latitude.toFixed(6)},{' '}
-              {selectedLocation.longitude.toFixed(6)}
-            </Text>
-          </View>
-        ) : null}
+        {/* Selected location badge removed — QR will still encode the selected coords but no text will be stamped on the photo */}
         <QRCodeOverlay
           pos={qrPos}
           size={qrSize}
