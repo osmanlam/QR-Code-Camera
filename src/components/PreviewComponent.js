@@ -137,6 +137,10 @@ export default function PreviewComponent({ photo, onClose }) {
     setQuery(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => searchPlaces(text), 350);
+    // if user edits after selecting a place, clear the selection
+    if (selectedLocation && text !== selectedLocation.display_name) {
+      setSelectedLocation(null);
+    }
   }
 
   function selectPlace(item) {
@@ -193,24 +197,35 @@ export default function PreviewComponent({ photo, onClose }) {
             <ActivityIndicator size="small" color="#38C172" />
           </View>
         ) : null}
-        {suggestions && suggestions.length > 0 ? (
-          <FlatList
-            data={suggestions}
-            keyExtractor={item => item.id || `${item.lat}_${item.lon}`}
-            style={{ maxHeight: 220, marginTop: 6, backgroundColor: '#111', borderRadius: 6 }}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => selectPlace(item)} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#222' }}>
-                <Text style={{ color: '#fff', fontWeight: '700' }}>{item.title || item.display_name}</Text>
-                {item.subtitle ? <Text style={{ color: '#ccc', fontSize: 12 }}>{item.subtitle}</Text> : null}
-              </TouchableOpacity>
-            )}
-          />
-        ) : null}
-        {!searching && query && query.length >= 2 && suggestions && suggestions.length === 0 ? (
-          <View style={{ padding: 8 }}>
-            <Text style={{ color: '#fff', opacity: 0.8 }}>{lastError || 'No results'}</Text>
-          </View>
-        ) : null}
+        {/* Suggestions overlay: absolute and top-most */}
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', top: 54, left: '50%', transform: [{ translateX: -(IMAGE_WIDTH / 2) }], width: IMAGE_WIDTH - 16, zIndex: 9999, elevation: 20 }}
+        >
+          {suggestions && suggestions.length > 0 ? (
+            <View style={{ backgroundColor: '#111', borderRadius: 6, overflow: 'hidden' }}>
+              <FlatList
+                data={suggestions}
+                keyExtractor={item => item.id || `${item.lat}_${item.lon}`}
+                style={{ maxHeight: 300 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity onPress={() => selectPlace(item)} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#222' }}>
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>{item.title || item.display_name}</Text>
+                    {item.subtitle ? <Text style={{ color: '#ccc', fontSize: 12 }}>{item.subtitle}</Text> : null}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          ) : null}
+
+          {/* Show error/no-results only when user hasn't selected this exact query */}
+          {!searching && query && query.length >= 2 && suggestions && suggestions.length === 0 && (!selectedLocation || query !== selectedLocation.display_name) ? (
+            <View style={{ backgroundColor: '#111', padding: 12, borderRadius: 6 }}>
+              <Text style={{ color: '#fff', opacity: 0.9 }}>{lastError || 'No results'}</Text>
+            </View>
+          ) : null}
+        </View>
+
         {selectedLocation ? (
           <Text style={{ color: '#fff', marginTop: 6 }}>Selected: {selectedLocation.display_name}</Text>
         ) : null}
