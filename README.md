@@ -31,6 +31,19 @@ This app is built with the Expo/React Native ecosystem to capture photos, overla
 - `src/components/QRCodeOverlay.js`: Draggable QR overlay component
 - `src/styles/styles.js`: Style constants and shared styles
 
+## Features and APIs
+- Device/Expo APIs used:
+	- Camera: `expo-camera` (`CameraView`, `useCameraPermissions`, `takePictureAsync`, flash control)
+	- Media Library: `expo-media-library` (request permission, `createAssetAsync` to save images)
+	- Image Picker: `expo-image-picker` (select existing photos from the gallery)
+	- Location: `expo-location` (foreground permission, `getCurrentPositionAsync` for coordinates)
+	- Gestures & Safe Area: `react-native-gesture-handler`, `react-native-safe-area-context`
+
+- Saving functionality:
+	- The composed view (photo + QR overlay) is flattened and saved to the device gallery using `react-native-view-shot` (capture) + `expo-media-library` (persist).
+
+- REST API used:
+	- Photon Geocoding API (Komoot) via HTTP `fetch` for place search and suggestions.
+
 ## AI Assistance
 This README and technology summary were authored with assistance from GitHub Copilot AI.
-
