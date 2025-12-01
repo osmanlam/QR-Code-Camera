@@ -1,3 +1,5 @@
+// PreviewComponent: Shows the captured image with a draggable QR code overlay.
+// Lets the user search/select a place, size/color the QR, and save a flattened image to gallery.
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Image, Text, TouchableOpacity, Alert, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import Slider from '@react-native-community/slider';
@@ -8,30 +10,39 @@ import styles, { IMAGE_WIDTH, IMAGE_HEIGHT, MIN_QR_SIZE, MAX_QR_SIZE, DEFAULT_QR
 import QRCodeOverlay from './QRCodeOverlay';
 
 export default function PreviewComponent({ photo, onClose }) {
+  // Ref to the composite view for snapshotting (react-native-view-shot)
   const viewShotRef = useRef();
+  // Tracks the last committed QR position so drag deltas can be applied smoothly
   const qrLast = useRef({ x: 210, y: 370 });
 
+  // QR overlay state
   const [qrPos, setQrPos] = useState({ x: qrLast.current.x, y: qrLast.current.y });
   const [qrSize, setQrSize] = useState(DEFAULT_QR_SIZE);
   const [qrColor, setQrColor] = useState(DEFAULT_QR_COLOR);
+  // Save operation loading flag
   const [loading, setLoading] = useState(false);
+  // Place search state
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [searching, setSearching] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [lastError, setLastError] = useState(null);
+  // Debounce timer for search queries
   const searchTimer = useRef(null);
 
   useEffect(() => {
+    // Cleanup pending search timeout when component unmounts
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, []);
 
   function onDragGesture(evt) {
+    // Drag handler for QR overlay: update position while dragging, then commit on END.
     if (evt.nativeEvent.state === State.ACTIVE) {
       let x = qrLast.current.x + evt.nativeEvent.translationX;
       let y = qrLast.current.y + evt.nativeEvent.translationY;
+      // Constrain QR within image bounds based on current size
       x = Math.max(0, Math.min(x, IMAGE_WIDTH - qrSize));
       y = Math.max(0, Math.min(y, IMAGE_HEIGHT - qrSize));
       setQrPos({ x, y });
@@ -41,6 +52,7 @@ export default function PreviewComponent({ photo, onClose }) {
       let y = qrLast.current.y + evt.nativeEvent.translationY;
       x = Math.max(0, Math.min(x, IMAGE_WIDTH - qrSize));
       y = Math.max(0, Math.min(y, IMAGE_HEIGHT - qrSize));
+      // Persist the new position as the "last" baseline
       qrLast.current.x = x;
       qrLast.current.y = y;
       setQrPos({ x, y });
@@ -48,6 +60,7 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function onQRSizeChange(newSize) {
+    // Update QR size and ensure the QR remains within bounds at its last position
     const x = Math.max(0, Math.min(qrLast.current.x, IMAGE_WIDTH - newSize));
     const y = Math.max(0, Math.min(qrLast.current.y, IMAGE_HEIGHT - newSize));
     setQrPos({ x, y });
@@ -57,7 +70,8 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function getMapURL(coords) {
-    // prefer a user-selected location; fall back to photo coords
+    // Build a Google Maps search URL from coordinates.
+    // Prefer a user-selected location; fall back to photo coords from capture.
     const c = selectedLocation || coords;
     return c && c.latitude
       ? `https://www.google.com/maps/search/?api=1&query=${c.latitude},${c.longitude}`
@@ -65,6 +79,8 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   async function searchPlaces(q) {
+    // Debounced place search using Photon API.
+    // Maps results to a compact structure with stable ids.
     if (!q || q.length < 2) {
       setSuggestions([]);
       setLastError(null);
@@ -119,6 +135,7 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function onQueryChange(text) {
+    // Update the query and debounce the search request.
     setQuery(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => searchPlaces(text), 350);
@@ -129,6 +146,7 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function selectPlace(item) {
+    // When a suggestion is tapped, persist its coords and reflect the display name in the search bar
     const lat = parseFloat(item.lat);
     const lon = parseFloat(item.lon);
     if (!isNaN(lat) && !isNaN(lon)) {
@@ -140,6 +158,7 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   function resetQR() {
+    // Restore QR position/size/color to defaults
     setQrPos({ x: 210, y: 370 });
     qrLast.current = { x: 210, y: 370 };
     setQrSize(DEFAULT_QR_SIZE);
@@ -147,6 +166,8 @@ export default function PreviewComponent({ photo, onClose }) {
   }
 
   async function captureAndSave() {
+    // Flatten the image + QR overlay into a single bitmap and save to the gallery.
+    // Asks for media library permission when needed.
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -170,6 +191,7 @@ export default function PreviewComponent({ photo, onClose }) {
       {/* Search bar + suggestions */}
       <View style={{ width: IMAGE_WIDTH, padding: 8 }}>
         <TextInput
+          // Place search input; submit triggers immediate search, typing is debounced
           placeholder="Search place"
           placeholderTextColor="#ccc"
           value={query}
@@ -214,6 +236,7 @@ export default function PreviewComponent({ photo, onClose }) {
         {/* selectedLocation label intentionally hidden from the stamped image UI */}
       </View>
       <View ref={viewShotRef} collapsable={false} style={styles.compositePreview}>
+        {/* Base image (from CameraComponent) plus a draggable QR overlay that encodes a map URL */}
         <Image source={{ uri: photo.uri }} style={styles.previewImage} />
         {/* Selected location badge removed — QR will still encode the selected coords but no text will be stamped on the photo */}
         <QRCodeOverlay
@@ -243,6 +266,7 @@ export default function PreviewComponent({ photo, onClose }) {
       </View>
 
       <View style={styles.colorRow}>
+        {/* Quick color presets for the QR overlay */}
         {['#000', '#2e8b57', '#e85d04', '#005af0', '#222', '#ff0000', '#edff21'].map(preset => (
           <TouchableOpacity
             key={preset}
