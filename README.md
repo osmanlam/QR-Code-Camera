@@ -31,3 +31,6 @@ This app is built with the Expo/React Native ecosystem to capture photos, overla
 - `src/components/QRCodeOverlay.js`: Draggable QR overlay component
 - `src/styles/styles.js`: Style constants and shared styles
 
+## AI Assistance
+This README and technology summary were authored with assistance from GitHub Copilot AI.
+
