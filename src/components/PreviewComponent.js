@@ -213,7 +213,11 @@ export default function PreviewComponent({ photo, onClose }) {
             <View style={{ backgroundColor: '#111', borderRadius: 6, overflow: 'hidden' }}>
               <FlatList
                 data={suggestions}
-                keyExtractor={item => item.id || `${item.lat}_${item.lon}`}
+                keyExtractor={(item, index) => {
+                  // Combine a stable id with index to avoid collisions when API returns duplicates
+                  const base = item.id || `${item.lat}_${item.lon}`;
+                  return `${base}-${index}`;
+                }}
                 style={{ maxHeight: 300 }}
                 renderItem={({ item }) => (
                   <TouchableOpacity onPress={() => selectPlace(item)} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#222' }}>
